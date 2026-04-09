@@ -46,8 +46,8 @@ async def pending(msg: types.Message):
         await msg.answer('Kutilayotgan xodim yo‘q')
         return
     text = 'Kutilayotgan xodimlar:\n\n'
-    for user_id, full_name, username, phone in rows:
-        text += f'{full_name}\nID: {user_id}\nUsername: @{username or "-"}\nTel: {phone or "-"}\n\n'
+    for row in rows:
+        text += f"{row['full_name']}\nID: {row['user_id']}\nUsername: @{row['username'] or '-'}\nTel: {row['phone'] or '-'}\n\n"
     await msg.answer(text)
 
 
@@ -60,8 +60,8 @@ async def active_list(msg: types.Message):
         await msg.answer('Faol xodim yo‘q')
         return
     text = 'Faol xodimlar:\n\n'
-    for user_id, full_name, username, phone in rows:
-        text += f'{full_name}\nID: {user_id}\nUsername: @{username or "-"}\nTel: {phone or "-"}\n\n'
+    for row in rows:
+        text += f"{row['full_name']}\nID: {row['user_id']}\nUsername: @{row['username'] or '-'}\nTel: {row['phone'] or '-'}\n\n"
     await msg.answer(text)
 
 

@@ -1,36 +1,20 @@
-FULL DAVOMAT TIZIMI
+SQLITE FULL DAVOMAT TIZIMI
 
-Admin bot:
-- /start
-- Kunlik hisobot (Excel)
-- Oylik hisobot (Excel)
-- Kutilayotganlar
-- Xodim qo'shish
-- Xodim o'chirish
-
-Employee bot:
-- /start
-- Ism familya kiritadi
-- Telefon yuboradi
-- Admin tasdiqlaydi
-- Keldim/Ketdim
-- Rasm
-- Lokatsiya
-- Adminga xabar yuboradi
-
-RAILWAY:
-1) admin service start command: python admin_bot.py
-2) employee service start command: python employee_bot.py
-3) ikkalasiga DATABASE_URL=Postgres.DATABASE_URL reference
+Database kerak emas. Railway diskda davomat.db fayl yaratiladi.
 
 Admin bot variables:
-BOT_TOKEN=admin token
+BOT_TOKEN=admin bot token
 ADMIN_IDS=sizning tg id
-DATABASE_URL=reference
-WORK_START=09:00
+DB_PATH=/data/davomat.db
+TIMEZONE=Asia/Tashkent
 
 Employee bot variables:
 BOT_TOKEN=xodim bot token
 ADMIN_CHAT_ID=admin bot chat id
-DATABASE_URL=reference
-WORK_START=09:00
+DB_PATH=/data/davomat.db
+TIMEZONE=Asia/Tashkent
+
+Railway:
+1) admin service start command: python admin_bot.py
+2) employee service start command: python employee_bot.py
+3) ikkalasiga Persistent Volume ulang va mount path: /data
