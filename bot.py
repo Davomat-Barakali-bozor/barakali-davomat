@@ -75,5 +75,5 @@ async def remove(msg: types.Message):
     except:
         await msg.answer("Masalan: /remove 1735448588")
 
-if name == "__main__":
+if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
