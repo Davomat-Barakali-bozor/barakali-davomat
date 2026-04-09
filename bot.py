@@ -9,34 +9,71 @@ ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS").split(",")))
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
+# bu joy real loyihada DB bo‘ladi
+registered = {}
+
 menu = ReplyKeyboardMarkup(resize_keyboard=True)
-menu.add("📊 Kunlik hisobot")
-menu.add("📅 Oylik hisobot")
+menu.add("🕓 Kutilayotganlar")
 menu.add("➕ Xodim qo‘shish")
 menu.add("❌ Xodim o‘chirish")
 
 @dp.message_handler(commands=['start'])
 async def start(msg: types.Message):
-    if msg.from_user.id in ADMIN_IDS:
-        await msg.answer("Admin panelga xush kelibsiz", reply_markup=menu)
-    else:
+    if msg.from_user.id not in ADMIN_IDS:
         await msg.answer("Siz admin emassiz")
+        return
+    await msg.answer("Admin panelga xush kelibsiz", reply_markup=menu)
 
-@dp.message_handler(lambda msg: msg.text == "📊 Kunlik hisobot")
-async def daily(msg: types.Message):
-    await msg.answer("Bugungi hisobot")
+@dp.message_handler(lambda msg: msg.text == "🕓 Kutilayotganlar")
+async def pending(msg: types.Message):
+    if msg.from_user.id not in ADMIN_IDS:
+        return
 
-@dp.message_handler(lambda msg: msg.text == "📅 Oylik hisobot")
-async def monthly(msg: types.Message):
-    await msg.answer("Oylik hisobot")
+    pending_users = [u for u in registered.values() if not u["approved"]]
 
-@dp.message_handler(lambda msg: msg.text == "➕ Xodim qo‘shish")
-async def add_worker(msg: types.Message):
-    await msg.answer("Xodim ID yuboring")
+    if not pending_users:
+        await msg.answer("Kutilayotgan xodim yo‘q")
+        return
 
-@dp.message_handler(lambda msg: msg.text == "❌ Xodim o‘chirish")
-async def remove_worker(msg: types.Message):
-    await msg.answer("O‘chirish uchun ID yuboring")
+    text = "Kutilayotganlar:\n\n"
+    for u in pending_users:
+        text += (
+            f"{u['name']}\n"
+            f"TG ID: {u['tg_id']}\n"
+            f"Username: @{u['username']}\n"
+            f"Tel: {u['phone']}\n\n"
+        )
+    await msg.answer(text)
 
-if __name__ == "__main__":
+@dp.message_handler(commands=['approve'])
+async def approve(msg: types.Message):
+    if msg.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        user_id = int(msg.get_args())
+        if user_id in registered:
+            registered[user_id]["approved"] = True
+            await msg.answer("Xodim qo‘shildi ✅")
+        else:
+            await msg.answer("Bunday TG ID topilmadi")
+    except:
+        await msg.answer("Masalan: /approve 1735448588")
+
+@dp.message_handler(commands=['remove'])
+async def remove(msg: types.Message):
+    if msg.from_user.id not in ADMIN_IDS:
+        return
+
+    try:
+        user_id = int(msg.get_args())
+        if user_id in registered:
+            registered[user_id]["approved"] = False
+            await msg.answer("Xodim o‘chirildi ❌")
+        else:
+            await msg.answer("Bunday TG ID topilmadi")
+    except:
+        await msg.answer("Masalan: /remove 1735448588")
+
+if name == "__main__":
     executor.start_polling(dp, skip_updates=True)
