@@ -24,19 +24,19 @@ async def start(msg: types.Message):
 
 @dp.message_handler(lambda msg: msg.text == "📊 Kunlik hisobot")
 async def daily(msg: types.Message):
-    await msg.answer("Bugungi hisobot: (keyin DB ulanadi)")
+    await msg.answer("Bugungi hisobot")
 
 @dp.message_handler(lambda msg: msg.text == "📅 Oylik hisobot")
 async def monthly(msg: types.Message):
-    await msg.answer("Oylik hisobot: (keyin DB ulanadi)")
+    await msg.answer("Oylik hisobot")
 
 @dp.message_handler(lambda msg: msg.text == "➕ Xodim qo‘shish")
 async def add_worker(msg: types.Message):
-    await msg.answer("Yangi xodim ID sini yuboring")
+    await msg.answer("Xodim ID yuboring")
 
 @dp.message_handler(lambda msg: msg.text == "❌ Xodim o‘chirish")
 async def remove_worker(msg: types.Message):
-    await msg.answer("O‘chiriladigan xodim ID sini yuboring")
+    await msg.answer("O‘chirish uchun ID yuboring")
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
