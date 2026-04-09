@@ -1,20 +1,34 @@
-SQLITE FULL DAVOMAT TIZIMI
+PRO SQLITE DAVOMAT TIZIMI
 
-Database kerak emas. Railway diskda davomat.db fayl yaratiladi.
+Admin bot imkoniyatlari:
+- Kutilayotgan xodimlar
+- Approve / Reject inline tugmalar
+- Tasdiqlangan xodimlar ro'yxati
+- Kunlik Excel hisobot
+- Oylik Excel hisobot
 
-Admin bot variables:
-BOT_TOKEN=admin bot token
+Xodim bot imkoniyatlari:
+- Ism familya bilan ro'yxatdan o'tish
+- Telefon yuborish
+- Tasdiqlangandan keyin Keldim / Ketdim
+- Rasm yuborish
+- Lokatsiya yuborish
+- Adminga foto + lokatsiya xabari
+
+Railway admin bot variables:
+BOT_TOKEN=admin token
 ADMIN_IDS=sizning tg id
 DB_PATH=/data/davomat.db
 TIMEZONE=Asia/Tashkent
 
-Employee bot variables:
-BOT_TOKEN=xodim bot token
-ADMIN_CHAT_ID=admin bot chat id
+Railway employee bot variables:
+BOT_TOKEN=xodim token
+ADMIN_CHAT_ID=admin chat id
 DB_PATH=/data/davomat.db
 TIMEZONE=Asia/Tashkent
 
-Railway:
-1) admin service start command: python admin_bot.py
-2) employee service start command: python employee_bot.py
-3) ikkalasiga Persistent Volume ulang va mount path: /data
+Start command:
+admin -> python admin_bot.py
+employee -> python employee_bot.py
+
+Ikkala servicega ham volume mount path: /data

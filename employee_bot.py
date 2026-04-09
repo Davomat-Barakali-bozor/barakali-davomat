@@ -4,8 +4,9 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils import executor
 
 from db import (
-    init_db, set_employee_state, get_employee_state, register_pending_employee,
-    is_employee_approved, record_attendance
+    init_db, set_employee_state, get_employee_state,
+    upsert_pending_employee, is_employee_approved,
+    record_attendance, get_latest_today_action
 )
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -22,7 +23,7 @@ menu.add(KeyboardButton('📍 Lokatsiya yuborish', request_location=True))
 
 @dp.message_handler(commands=['start'])
 async def start(msg: types.Message):
-    set_employee_state(msg.from_user.id, state='waiting_name')
+    set_employee_state(msg.from_user.id, step='waiting_name')
     await msg.answer('Ism familyangizni yozing:', reply_markup=menu)
 
 
@@ -32,8 +33,26 @@ async def contact_handler(msg: types.Message):
     if not state:
         await msg.answer('Avval /start bosing')
         return
-    set_employee_state(msg.from_user.id, state='waiting_after_contact', phone=msg.contact.phone_number, full_name=state['full_name'] if 'full_name' in state.keys() else None)
-    await msg.answer('Telefon saqlandi. Endi kuting yoki Keldim/Ketdim ni admin tasdiqlagach ishlating.')
+    if state['step'] not in ('waiting_contact', 'waiting_phone'):
+        await msg.answer('Avval ism familyangizni kiriting')
+        return
+    upsert_pending_employee(
+        user_id=msg.from_user.id,
+        full_name=state['full_name'] or msg.from_user.full_name,
+        username=msg.from_user.username,
+        phone=msg.contact.phone_number,
+    )
+    set_employee_state(msg.from_user.id, None)
+    if ADMIN_CHAT_ID:
+        await bot.send_message(
+            ADMIN_CHAT_ID,
+            f"Yangi ariza keldi ⏳\n\n"
+            f"Xodim: {state['full_name'] or msg.from_user.full_name}\n"
+            f"ID: {msg.from_user.id}\n"
+            f"Username: @{msg.from_user.username or '-'}\n"
+            f"Tel: {msg.contact.phone_number}"
+        )
+    await msg.answer('Arizangiz yuborildi. Admin tasdiqlashini kuting ✅')
 
 
 @dp.message_handler(lambda m: m.text in ['✅ Keldim', '❌ Ketdim'])
@@ -41,38 +60,53 @@ async def action_handler(msg: types.Message):
     if not is_employee_approved(msg.from_user.id):
         await msg.answer('Siz hali admin tomonidan tasdiqlanmagansiz.')
         return
+
+    latest = get_latest_today_action(msg.from_user.id)
+    if msg.text == '✅ Keldim' and latest == 'checkin':
+        await msg.answer('Siz bugun allaqachon Keldim yuborgansiz.')
+        return
+    if msg.text == '❌ Ketdim' and latest != 'checkin':
+        await msg.answer('Avval Keldim yuborishingiz kerak.')
+        return
+
     action = 'checkin' if msg.text == '✅ Keldim' else 'checkout'
-    st = get_employee_state(msg.from_user.id)
-    phone = st['phone'] if st else None
-    full_name = st['full_name'] if st else None
-    set_employee_state(msg.from_user.id, state='waiting_photo', action=action, phone=phone, full_name=full_name)
+    set_employee_state(msg.from_user.id, step='waiting_photo', action=action)
     await msg.answer('Endi rasmingizni yuboring.')
 
 
 @dp.message_handler(content_types=types.ContentType.PHOTO)
 async def photo_handler(msg: types.Message):
     state = get_employee_state(msg.from_user.id)
-    if not state or state['state'] != 'waiting_photo':
+    if not state or state['step'] != 'waiting_photo':
         await msg.answer('Avval Keldim yoki Ketdim ni bosing.')
         return
-    set_employee_state(msg.from_user.id, state='waiting_location', action=state['action'], phone=state['phone'], full_name=state['full_name'], photo_file_id=msg.photo[-1].file_id)
+    set_employee_state(msg.from_user.id, step='waiting_location', action=state['action'], photo_file_id=msg.photo[-1].file_id)
     await msg.answer('Endi lokatsiyani yuboring.')
 
 
 @dp.message_handler(content_types=types.ContentType.LOCATION)
 async def location_handler(msg: types.Message):
     state = get_employee_state(msg.from_user.id)
-    if not state or state['state'] != 'waiting_location':
+    if not state or state['step'] != 'waiting_location':
         await msg.answer('Avval rasm yuboring.')
         return
-    action = state['action']
-    phone = state['phone']
-    photo_file_id = state['photo_file_id']
-    full_name_db, event_time = record_attendance(msg.from_user.id, action, msg.location.latitude, msg.location.longitude, photo_file_id)
-    title = '✅ Keldim' if action == 'checkin' else '❌ Ketdim'
-    caption = f'{title}\nXodim: {full_name_db}\nUsername: @{msg.from_user.username or "-"}\nTel: {phone or "-"}\nLokatsiya: {msg.location.latitude}, {msg.location.longitude}'
+    full_name, event_time = record_attendance(
+        user_id=msg.from_user.id,
+        action=state['action'],
+        latitude=msg.location.latitude,
+        longitude=msg.location.longitude,
+        photo_file_id=state['photo_file_id'],
+    )
+    title = '✅ Keldim' if state['action'] == 'checkin' else '❌ Ketdim'
+    caption = (
+        f"{title}\n"
+        f"Xodim: {full_name}\n"
+        f"Username: @{msg.from_user.username or '-'}\n"
+        f"Lokatsiya: {msg.location.latitude}, {msg.location.longitude}\n"
+        f"Vaqt: {event_time.strftime('%H:%M')}"
+    )
     if ADMIN_CHAT_ID:
-        await bot.send_photo(ADMIN_CHAT_ID, photo_file_id, caption=caption)
+        await bot.send_photo(ADMIN_CHAT_ID, state['photo_file_id'], caption=caption)
         await bot.send_location(ADMIN_CHAT_ID, msg.location.latitude, msg.location.longitude)
     set_employee_state(msg.from_user.id, None)
     await msg.answer('Davomat yuborildi ✅')
@@ -83,17 +117,12 @@ async def text_handler(msg: types.Message):
     state = get_employee_state(msg.from_user.id)
     if not state:
         return
-    if state['state'] == 'waiting_name':
-        set_employee_state(msg.from_user.id, state='waiting_contact', full_name=msg.text.strip())
+    if state['step'] == 'waiting_name':
+        set_employee_state(msg.from_user.id, step='waiting_contact', full_name=msg.text.strip())
         await msg.answer('Endi telefon raqamingizni yuboring.', reply_markup=menu)
         return
-    if state['state'] == 'waiting_contact':
+    if state['step'] == 'waiting_contact':
         await msg.answer('Telefonni tugma orqali yuboring.')
-        return
-    if state['state'] == 'waiting_after_contact':
-        register_pending_employee(msg.from_user.id, state['full_name'] or msg.from_user.full_name, msg.from_user.username, state['phone'] or '-')
-        set_employee_state(msg.from_user.id, None)
-        await msg.answer('Arizangiz yuborildi. Admin tasdiqlagach foydalanasiz.')
         return
 
 

@@ -1,28 +1,24 @@
 import os
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup
+from aiogram.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, InputFile
 from aiogram.utils import executor
 
 from db import (
     init_db, get_pending_employees, approve_employee, remove_employee,
-    get_active_employees, set_admin_state, get_admin_state,
-    create_daily_excel, create_month_excel, now_local
+    get_approved_employees, create_daily_excel, create_month_excel,
+    now_local
 )
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-admin_ids_env = os.getenv('ADMIN_IDS')
-ADMIN_IDS = list(map(int, admin_ids_env.split(','))) if admin_ids_env else []
+admin_ids_env = os.getenv('ADMIN_IDS', '')
+ADMIN_IDS = [int(x) for x in admin_ids_env.split(',') if x.strip().isdigit()]
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
 menu = ReplyKeyboardMarkup(resize_keyboard=True)
-menu.add('📊 Kunlik hisobot')
-menu.add('📅 Oylik hisobot')
-menu.add('🕓 Kutilayotganlar')
-menu.add('➕ Xodim qo‘shish')
-menu.add('❌ Xodim o‘chirish')
-menu.add('📋 Xodimlar ro‘yxati')
+menu.add('📊 Kunlik hisobot', '📅 Oylik hisobot')
+menu.add('🕓 Kutilayotganlar', '📋 Xodimlar ro‘yxati')
 
 
 def is_admin(user_id: int) -> bool:
@@ -45,40 +41,72 @@ async def pending(msg: types.Message):
     if not rows:
         await msg.answer('Kutilayotgan xodim yo‘q')
         return
-    text = 'Kutilayotgan xodimlar:\n\n'
     for row in rows:
-        text += f"{row['full_name']}\nID: {row['user_id']}\nUsername: @{row['username'] or '-'}\nTel: {row['phone'] or '-'}\n\n"
-    await msg.answer(text)
+        kb = InlineKeyboardMarkup(row_width=2)
+        kb.add(
+            InlineKeyboardButton('✅ Tasdiqlash', callback_data=f"approve:{row['user_id']}"),
+            InlineKeyboardButton('❌ Rad etish', callback_data=f"reject:{row['user_id']}")
+        )
+        text = (
+            f"Xodim: {row['full_name']}\n"
+            f"ID: {row['user_id']}\n"
+            f"Username: @{row['username'] or '-'}\n"
+            f"Tel: {row['phone'] or '-'}"
+        )
+        await msg.answer(text, reply_markup=kb)
+
+
+@dp.callback_query_handler(lambda c: c.data.startswith('approve:'))
+async def approve_cb(call: types.CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer('Ruxsat yo‘q', show_alert=True)
+        return
+    user_id = int(call.data.split(':')[1])
+    ok = approve_employee(user_id)
+    if ok:
+        try:
+            await bot.send_message(user_id, 'Siz admin tomonidan tasdiqlandingiz ✅')
+        except Exception:
+            pass
+        await call.message.edit_text(call.message.text + '\n\nTasdiqlandi ✅')
+    else:
+        await call.answer('Topilmadi', show_alert=True)
+
+
+@dp.callback_query_handler(lambda c: c.data.startswith('reject:'))
+async def reject_cb(call: types.CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer('Ruxsat yo‘q', show_alert=True)
+        return
+    user_id = int(call.data.split(':')[1])
+    ok = remove_employee(user_id)
+    if ok:
+        try:
+            await bot.send_message(user_id, 'Arizangiz rad etildi ❌')
+        except Exception:
+            pass
+        await call.message.edit_text(call.message.text + '\n\nRad etildi ❌')
+    else:
+        await call.answer('Topilmadi', show_alert=True)
 
 
 @dp.message_handler(lambda m: m.text == '📋 Xodimlar ro‘yxati')
-async def active_list(msg: types.Message):
+async def employees_list(msg: types.Message):
     if not is_admin(msg.from_user.id):
         return
-    rows = get_active_employees()
+    rows = get_approved_employees()
     if not rows:
-        await msg.answer('Faol xodim yo‘q')
+        await msg.answer('Tasdiqlangan xodim yo‘q')
         return
-    text = 'Faol xodimlar:\n\n'
+    text = 'Tasdiqlangan xodimlar:\n\n'
     for row in rows:
-        text += f"{row['full_name']}\nID: {row['user_id']}\nUsername: @{row['username'] or '-'}\nTel: {row['phone'] or '-'}\n\n"
+        text += (
+            f"{row['full_name']}\n"
+            f"ID: {row['user_id']}\n"
+            f"Username: @{row['username'] or '-'}\n"
+            f"Tel: {row['phone'] or '-'}\n\n"
+        )
     await msg.answer(text)
-
-
-@dp.message_handler(lambda m: m.text == '➕ Xodim qo‘shish')
-async def add_mode(msg: types.Message):
-    if not is_admin(msg.from_user.id):
-        return
-    set_admin_state(msg.from_user.id, 'approve')
-    await msg.answer('Tasdiqlash uchun xodim ID sini yuboring')
-
-
-@dp.message_handler(lambda m: m.text == '❌ Xodim o‘chirish')
-async def remove_mode(msg: types.Message):
-    if not is_admin(msg.from_user.id):
-        return
-    set_admin_state(msg.from_user.id, 'remove')
-    await msg.answer('O‘chirish uchun xodim ID sini yuboring')
 
 
 @dp.message_handler(lambda m: m.text == '📊 Kunlik hisobot')
@@ -87,7 +115,7 @@ async def daily_report(msg: types.Message):
         return
     d = now_local().date()
     bio = create_daily_excel(d)
-    await bot.send_document(msg.chat.id, types.InputFile(bio, filename=f'kunlik_hisobot_{d}.xlsx'))
+    await bot.send_document(msg.chat.id, InputFile(bio, filename=f'kunlik_hisobot_{d}.xlsx'))
 
 
 @dp.message_handler(lambda m: m.text == '📅 Oylik hisobot')
@@ -96,28 +124,7 @@ async def monthly_report(msg: types.Message):
         return
     now = now_local()
     bio = create_month_excel(now.year, now.month)
-    await bot.send_document(msg.chat.id, types.InputFile(bio, filename=f'oylik_hisobot_{now.year}_{now.month:02d}.xlsx'))
-
-
-@dp.message_handler()
-async def process_id(msg: types.Message):
-    if not is_admin(msg.from_user.id):
-        return
-    state = get_admin_state(msg.from_user.id)
-    if state not in ('approve', 'remove'):
-        return
-    try:
-        employee_id = int(msg.text.strip())
-    except ValueError:
-        await msg.answer('Faqat raqam yuboring')
-        return
-    if state == 'approve':
-        ok = approve_employee(employee_id)
-        await msg.answer('Xodim qo‘shildi ✅' if ok else 'Bunday xodim topilmadi')
-    else:
-        ok = remove_employee(employee_id)
-        await msg.answer('Xodim o‘chirildi ❌' if ok else 'Bunday xodim topilmadi')
-    set_admin_state(msg.from_user.id, None)
+    await bot.send_document(msg.chat.id, InputFile(bio, filename=f'oylik_hisobot_{now.year}_{now.month:02d}.xlsx'))
 
 
 if __name__ == '__main__':
